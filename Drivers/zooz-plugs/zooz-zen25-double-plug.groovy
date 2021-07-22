@@ -44,7 +44,7 @@
  *      - Initial Release
  *
  *
- *
+ *  Copyright 2020-2021 Jeff Page
  *  Copyright 2020 Kevin LaFramboise
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,6 +60,7 @@
  *  limitations under the License.
  *
 */
+
 import groovy.transform.Field
 
 @Field static final usbEndPoint = 3
@@ -72,14 +73,22 @@ metadata {
 		author: "Jeff Page / Kevin LaFramboise (@krlaframboise)",
 		importUrl: ""
 	) {
-		capability "Switch"		
+		capability "Actuator"
+		// capability "Switch"
 		capability "Outlet"
 		capability "PowerMeter"
 		capability "VoltageMeasurement"
 		capability "EnergyMeter"
 		capability "Configuration"
 		capability "Refresh"
-		capability "HealthCheck"
+		// capability "HealthCheck"
+
+		// command "leftOff"
+		// command "leftOn"
+		// command "rightOff"
+		// command "rightOn"		
+		command "resetStats"
+		command "childDevices", [[name:"Select One*", type: "ENUM", constraints: ["Create","Remove"] ]]
 
 		//attribute "assocDNI2", "string"
 		//attribute "assocDNI3", "string"
@@ -100,14 +109,6 @@ metadata {
 		// attribute "powerRight", "number"
 		// attribute "switchRight", "string"
 		// attribute "switchUsb", "string"
-						
-		// command "leftOff"
-		// command "leftOn"
-		// command "rightOff"
-		// command "rightOn"		
-		command "resetStats"
-		command "childDevices", [[name:"Select One*", type: "ENUM", constraints: ["Create","Remove"] ]]
-		
 
 		fingerprint mfr: "027A", prod: "A000", deviceId: "A003", deviceJoinName: "Zooz Double Plug"
 	}
@@ -147,24 +148,24 @@ def installed () {
 	runIn(10, createChildDevices) 
 }
 
-def updated() {	
-	if (!isDuplicateCommand(state.lastUpdated, 3000)) {
+def updated() {
+	if (!isDuplicateCommand(state.lastUpdated, 5000)) {
 		state.lastUpdated = new Date().time
-		
-		logDebug "updated..."
+
+		log.info "updated..."
 		log.warn "Debug logging is: ${debugEnable == true}"
 		log.warn "Description logging is: ${txtEnable == true}"
 	
-		runEvery3Hours(ping)
+		//runEvery3Hours(ping)
 		
 		if (childDevices?.size() != 3) {
 			runIn(2, createChildDevices)
 		}
 
-		if (debugEnable) runIn(1800, debugLogsOff, [overwrite: true])
+		if (debugEnable) runIn(1800, debugLogsOff)
 		
 		List<String> cmds = getConfigureCmds()
-		return cmds ?: []
+		return cmds ? delayBetween(cmds, 500) : []
 	}	
 }
 
@@ -242,16 +243,13 @@ def removeChildDevices() {
 
 def configure() {
 	log.warn "configure..."
-	if (debugEnable) runIn(1800, debugLogsOff, [overwrite: true])
-
-	updateHealthCheckInterval()
-	runIn(6, updateSyncStatus)
+	if (debugEnable) runIn(1800, debugLogsOff)
 	
 	if (!pendingChanges || state.resyncAll == null) {
 		logDebug "Enabling Full Re-Sync"
 		state.resyncAll = true
 	}
-			
+
 	List<String> cmds = []
 
 	if (device.currentValue("energy") == null) {
@@ -261,24 +259,12 @@ def configure() {
 	cmds += getRefreshCmds()
 	cmds += getConfigureCmds()
 	
-	state.resyncAll = false	
-	return delayBetween(cmds, 500)
-}
+	state.resyncAll = false
 
-private updateHealthCheckInterval() {
-	def minReportingInterval = (3 * 60 * 60)
-	
-	if (state.minReportingInterval != minReportingInterval) {
-		state.minReportingInterval = minReportingInterval
-			
-		// Set the Health Check interval so that it can be skipped twice plus 5 minutes.
-		def checkInterval = ((minReportingInterval * 2) + (5 * 60))
-		
-		def eventMap = createEventMap("checkInterval", checkInterval, false)
-		eventMap.data = [protocol: "zwave", hubHardwareId: device.hub.hardwareID]
-		
-		sendEvent(eventMap)
-	}
+	updateSyncingStatus()
+	runIn(6, refreshSyncStatus)
+
+	return delayBetween(cmds, 500)
 }
 
 private getConfigureCmds() {
@@ -294,8 +280,7 @@ private getConfigureCmds() {
 
 		if ((paramVal != null) && (state.resyncAll || (storedVal != paramVal))) {
 			logDebug "Changing ${param.name} (#${param.num}) from ${storedVal} to ${paramVal}"
-			cmds << configSetCmd(param, paramVal)
-			cmds << configGetCmd(param)
+			cmds += configSetGetCmd(param, paramVal)
 		}
 	}
 	
@@ -373,15 +358,12 @@ def childOff(dni) {
 
 private getChildSwitchCmds(value, dni) {
 	def endPoint = getEndPoint(dni)	
-	return delayBetween([
-		switchBinarySetCmd(value, endPoint)
-		// switchBinaryGetCmd(endPoint)
-	], 500)
+	return switchBinarySetCmd(value, endPoint)
 }
 
 
 def refresh() {
-	logDebug "refresh()..."
+	logDebug "refresh..."
 	def cmds = getRefreshCmds()
 	
 	childDevices.each {
@@ -463,53 +445,81 @@ void sendCommands(String cmd) {
 }
 
 
-private versionGetCmd() {
+//Consolidated zwave command functions so other code is easier to read
+String associationSetCmd(Integer group, List<Integer> nodes) {
+	return supervisionEncap(zwave.associationV2.associationSet(groupingIdentifier: group, nodeId: nodes))
+}
+
+String associationRemoveCmd(Integer group, List<Integer> nodes) {
+	return supervisionEncap(zwave.associationV2.associationRemove(groupingIdentifier: group, nodeId: nodes))
+}
+
+String associationGetCmd(Integer group) {
+	return secureCmd(zwave.associationV2.associationGet(groupingIdentifier: group))
+}
+
+String versionGetCmd() {
 	return secureCmd(zwave.versionV3.versionGet())
 }
 
-private basicGetCmd() {
+String basicGetCmd() {
 	return secureCmd(zwave.basicV1.basicGet())
 }
 
-private meterGetCmd(meter, endPoint) {
-	return multiChannelCmdEncapCmd(zwave.meterV3.meterGet(scale: meter.scale), endPoint)
+String meterGetCmd(meter, endPoint) {
+	return secureCmd(zwave.meterV3.meterGet(scale: meter.scale), endPoint)
 }
 
-private meterResetCmd(endPoint) {
-	return multiChannelCmdEncapCmd(zwave.meterV3.meterReset(), endPoint)
+String meterResetCmd(endPoint) {
+	return secureCmd(zwave.meterV3.meterReset(), endPoint)
 }
 
-private switchBinaryGetCmd(endPoint) {
-	return multiChannelCmdEncapCmd(zwave.switchBinaryV1.switchBinaryGet(), endPoint)
+String switchBinarySetCmd(Integer value, ep) {
+	return supervisionEncap(zwave.switchBinaryV1.switchBinarySet(switchValue: value), ep)
 }
 
-private switchBinarySetCmd(val, endPoint) {
-	return multiChannelCmdEncapCmd(zwave.switchBinaryV1.switchBinarySet(switchValue: val), endPoint)
-}
-
-String multiChannelCmdEncapCmd(cmd, endPoint) {
-	//logTrace "multiChannelCmdEncapCmd: ${cmd} (ep ${endPoint})"
-	if (endPoint) {
-		cmd = zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint:safeToInt(endPoint)).encapsulate(cmd)
-	}
-	return secureCmd(cmd)
+String switchBinaryGetCmd(ep) {
+	return secureCmd(zwave.switchBinaryV1.switchBinaryGet(), ep)
 }
 
 String configSetCmd(Map param, Integer value) {
-	return secureCmd(zwave.configurationV1.configurationSet(parameterNumber: param.num, size: param.size, scaledConfigurationValue: value))
+	return supervisionEncap(zwave.configurationV1.configurationSet(parameterNumber: param.num, size: param.size, scaledConfigurationValue: value))
 }
 
 String configGetCmd(Map param) {
 	return secureCmd(zwave.configurationV1.configurationGet(parameterNumber: param.num))
 }
 
-//From: https://github.com/hubitat/HubitatPublic/blob/master/examples/drivers/genericZWaveCentralSceneDimmer.groovy
-String secureCmd(String cmd){
-	return zwaveSecureEncap(cmd)
+List configSetGetCmd(Map param, Integer value) {
+	List<String> cmds = []
+	cmds << configSetCmd(param, value)
+	cmds << configGetCmd(param)
+	return cmds
 }
 
-String secureCmd(hubitat.zwave.Command cmd){
+//Secure and MultiChannel Encapsulate
+String secureCmd(String cmd) {
 	return zwaveSecureEncap(cmd)
+}
+String secureCmd(hubitat.zwave.Command cmd, ep=0) {
+	return zwaveSecureEncap(multiChannelEncap(cmd, ep))
+}
+
+//MultiChannel Encapsulate if needed
+//This is called from secureCmd or supervisionEncap, do not call directly
+String multiChannelEncap(hubitat.zwave.Command cmd, ep) {
+	//logTrace "multiChannelEncap: ${cmd} (ep ${ep})"
+	if (ep > 0) {
+		cmd = zwave.multiChannelV4.multiChannelCmdEncap(destinationEndPoint:ep).encapsulate(cmd)
+	}
+	return cmd.format()
+}
+
+String supervisionEncap(hubitat.zwave.Command cmd, ep=0) {
+	//logTrace "supervisionEncap: ${cmd} (ep ${ep})"
+
+		//If supervision disabled just multichannel and secure
+		return secureCmd(cmd, ep)
 }
 
 /*
@@ -599,17 +609,17 @@ void zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) 
 	}
 }
 
-void zwaveEvent(hubitat.zwave.commands.supervisionv1.SupervisionGet cmd, endpoint=0) {
+void zwaveEvent(hubitat.zwave.commands.supervisionv1.SupervisionGet cmd, ep=0) {
 	def encapsulatedCmd = cmd.encapsulatedCommand(commandClassVersions)
 	logTrace "${cmd} --ENCAP-- ${encapsulatedCmd}"
 	
 	if (encapsulatedCmd) {
-		zwaveEvent(encapsulatedCmd, endpoint)
+		zwaveEvent(encapsulatedCmd, ep)
 	} else {
 		log.warn "Unable to extract encapsulated cmd from $cmd"
 	}
 
-	sendCommands(multiChannelCmdEncapCmd(zwave.supervisionV1.supervisionReport(sessionID: cmd.sessionID, reserved: 0, moreStatusUpdates: false, status: 0xFF, duration: 0),endpoint))
+	sendCommands(secureCmd(zwave.supervisionV1.supervisionReport(sessionID: cmd.sessionID, reserved: 0, moreStatusUpdates: false, status: 0xFF, duration: 0), ep))
 }
 
 
@@ -619,9 +629,9 @@ void zwaveEvent(hubitat.zwave.commands.versionv3.VersionReport cmd) {
 }
 
 
-def zwaveEvent(hubitat.zwave.commands.configurationv2.ConfigurationReport cmd) {	
-	updateSyncStatus("Syncing...")
-	runIn(6, updateSyncStatus)
+def zwaveEvent(hubitat.zwave.commands.configurationv2.ConfigurationReport cmd) {
+	logTrace "${cmd}"	
+	updateSyncingStatus()
 	
 	Map param = configParams.find { it.num == cmd.parameterNumber }
 
@@ -636,16 +646,28 @@ def zwaveEvent(hubitat.zwave.commands.configurationv2.ConfigurationReport cmd) {
 	state.resyncAll = false	
 }
 
-void updateSyncStatus(String status=null) {	
-	if (status == null) {	
-		Integer changes = pendingChanges
-		status = changes ? "${changes} Pending Changes" : "Synced"
-	}
+//DEPRECIATED
+// void updateSyncStatus(String status=null) {	
+// 	if (status == null) {	
+// 		Integer changes = pendingChanges
+// 		status = changes ? "${changes} Pending Changes" : "Synced"
+// 	}
 
-	if (getSyncStatus() != status) {
-		executeSendEvent(null, createEventMap("syncStatus", status, false))		
-	}
+// 	if (getSyncStatus() != status) {
+// 		executeSendEvent(null, createEventMap("syncStatus", status, false))		
+// 	}
+// }
+
+void updateSyncingStatus() {
+	runIn(4, refreshSyncStatus)
+	executeSendEvent(null, createEventMap("syncStatus", "Syncing...", false))
 }
+
+void refreshSyncStatus() {
+	Integer changes = pendingChanges
+	executeSendEvent(null, createEventMap("syncStatus", (changes ?  "${changes} Pending Changes" : "Synced"), false))
+}
+
 
 String getSyncStatus() {
 	return device.currentValue("syncStatus")
@@ -696,7 +718,7 @@ def zwaveEvent(hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd, end
 	
 	executeSendEvent(findChildByEndPoint(endPoint), createEventMap("switch", value))
 	
-	if (endPoint) sendEvent(name: "switch${getEndPointName(endPoint)}", value:value, displayed: false)
+	//if (endPoint) sendEvent(name: "switch${getEndPointName(endPoint)}", value:value, displayed: false)
 }
 
 
@@ -715,7 +737,7 @@ def zwaveEvent(hubitat.zwave.commands.meterv3.MeterReport cmd, endPoint=0) {
 			break
 		case meterPower.scale:
 			sendMeterEvents(child, meterPower, val)
-			if (endPoint) sendEvent(name: "power${getEndPointName(endPoint)}", value: val, unit:"W", displayed: false)
+			//if (endPoint) sendEvent(name: "power${getEndPointName(endPoint)}", value: val, unit:"W", displayed: false)
 			break
 		case meterVoltage.scale:
 			sendMeterEvents(child, meterVoltage, val)
@@ -987,7 +1009,7 @@ Map getParam(Integer num, String name, Integer size, Integer defaultVal, Map opt
 Map setDefaultOption(Map options, Integer defaultVal) {
 	return options?.collectEntries { k, v ->
 		if ("${k}" == "${defaultVal}") {
-			v = "${v} [DEFAULT]"		
+			v = "${v} [DEFAULT]"
 		}
 		["$k": "$v"]
 	}
@@ -1174,5 +1196,5 @@ void logTxt(String msg) {
 //For Extreme Code Debugging - tracing commands
 void logTrace(String msg) {
 	//Uncomment to Enable
-	log.trace "${device.displayName}: ${msg}"
+	//log.trace "${device.displayName}: ${msg}"
 }
