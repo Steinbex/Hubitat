@@ -110,7 +110,7 @@ metadata {
 		// attribute "switchRight", "string"
 		// attribute "switchUsb", "string"
 
-		fingerprint mfr: "027A", prod: "A000", deviceId: "A003", deviceJoinName: "Zooz Double Plug"
+		fingerprint mfr:"027A", prod:"A000", deviceId:"A003", deviceJoinName: "Zooz Double Plug"
 	}
 	
 	preferences {
@@ -184,18 +184,18 @@ void childDevices(str) {
 
 def createChildDevices() {
 	(1..2).each { endPoint ->
-		if (!findChildByEndPoint(endPoint)) {			
+		if (!findChildByEndPoint(endPoint)) {
 			addChildOutlet(endPoint)
 		}
 	}
 
-	if (!findChildByEndPoint(usbEndPoint)) {			
+	if (!findChildByEndPoint(usbEndPoint)) {
 		addChildUSB(usbEndPoint)
 	}	
 }
 
 void addChildOutlet(endPoint) {
-	String deviceType = "Zooz ZEN25 Double Plug (Outlet)"
+	String deviceType = "Zooz ZEN25 Child Outlet"
 	String deviceTypeBak = "Generic Component Metering Switch"
 	String dni = getChildDeviceNetworkId(endPoint)
 	String name = getEndPointName(endPoint)?.toUpperCase()
@@ -871,7 +871,7 @@ private getConfigParams() {
 		powerReportingFrequencyParam,
 		energyReportingFrequencyParam,
 		voltageReportingFrequencyParam,
-		ampsReportingFrequencyParam,		
+		ampsReportingFrequencyParam,
 		leftAutoOffEnabledParam,
 		leftAutoOffIntervalParam,
 		rightAutoOffEnabledParam,
@@ -879,7 +879,8 @@ private getConfigParams() {
 		leftAutoOnEnabledParam,
 		leftAutoOnIntervalParam,
 		rightAutoOnEnabledParam,
-		rightAutoOnIntervalParam
+		rightAutoOnIntervalParam,
+		disableReportingParam
 	]
 }
 
@@ -992,6 +993,10 @@ private getManualControlParam() {
 
 private getLedIndicatorModeParam() {
 	return getParam(17, "LED Indicator Mode", 1, 1, [0:"Always On", 1:"On When Switch On", 2:"LED On for 5 Seconds", 3:"LED Always Off"])
+}
+
+private getDisableReportingParam() {
+	return getParam(18, "Disable All Power Reporting", 1, 0, [0:"Reporting Enabled", 1:"Reporting Disabled"])
 }
 
 Map getParam(Integer num, String name, Integer size, Integer defaultVal, Map options) {

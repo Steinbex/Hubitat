@@ -22,14 +22,14 @@
  */
 metadata {
 	definition (
-		name: "Zooz ZEN25 Double Plug (Outlet)", 
+		name: "Zooz ZEN25 Child Outlet", 
 		namespace: "jtp10181",
 		author: "Jeff Page / Kevin LaFramboise (@krlaframboise)",
 		importUrl: ""
 	) {
 		capability "Actuator"
 		capability "Sensor"
-		capability "Switch"		
+		capability "Switch"
 		capability "Outlet"
 		capability "PowerMeter"
 		capability "VoltageMeasurement"
@@ -49,17 +49,26 @@ metadata {
 		command "reset"
 	}
 	
-	preferences { }
+    preferences {
+        //Logging options similar to other Hubitat drivers
+        input name: "txtEnable", type: "bool", title: "Enable Description Text Logging?", defaultValue: false
+    }
 }
 
+void parse(List<Map> description) {
+    description.each {
+        logTxt "${it.descriptionText}"
+        sendEvent(it)
+    }
+}
 
 def installed() { }
 
-
 def updated() {	
-	parent.childUpdated(device.deviceNetworkId)
+	log.info "Updated..."
+    log.warn "Description logging is: ${txtEnable == true}"
+	//parent.childUpdated(device.deviceNetworkId)
 }
-
 
 def on() {
 	parent.childOn(device.deviceNetworkId)	
@@ -75,4 +84,8 @@ def refresh() {
 
 def reset() {
 	parent.childReset(device.deviceNetworkId)	
+}
+
+void logTxt(String msg) {
+    if (txtEnable) log.info "${device.displayName}: ${msg}"
 }
