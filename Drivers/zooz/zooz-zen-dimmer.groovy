@@ -773,7 +773,7 @@ String setParameter(paramNum, value, size = null) {
 		return
 	}
 	logDebug "setParameter ( number: $paramNum, value: $value, size: $size )" + (param ? " [${param.name}]" : "")
-	return secureCmd(configSetCmd(param, value as Integer))
+	return secureCmd(configSetCmd([num: paramNum, size: size], value as Integer))
 }
 
 
@@ -1035,7 +1035,7 @@ String switchMultilevelSetCmd(Integer value, Integer duration, Integer ep=0) {
 	return supervisionEncap(zwave.switchMultilevelV2.switchMultilevelSet(dimmingDuration: duration, value: value), ep)
 }
 
-String switchMultilevelGet(Integer ep=0) {
+String switchMultilevelGetCmd(Integer ep=0) {
 	return secureCmd(zwave.switchMultilevelV2.switchMultilevelGet(), ep)
 }
 
@@ -1193,7 +1193,7 @@ void executeRefreshCmds() {
 		cmds << versionGetCmd()
 	}
 
-	cmds << switchMultilevelGet()
+	cmds << switchMultilevelGetCmd()
 
 	sendCommands(cmds)
 }
