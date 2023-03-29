@@ -249,7 +249,7 @@ metadata {
 		command "setParameter",[[name:"parameterNumber*",type:"NUMBER", description:"Parameter Number", constraints:["NUMBER"]],
 			[name:"value*",type:"NUMBER", description:"Parameter Value", constraints:["NUMBER"]],
 			[name:"size",type:"NUMBER", description:"Parameter Size", constraints:["NUMBER"]]]
-		command "setSpecialLevel", [[name:"specialLevel", type:"NUMBER", description:"Level to set the dimmer to that doesn't turn the light on", constraints:["NUMBER"]] ]
+		command "setPrestageLevel", [[name:"prestageLevel", type:"NUMBER", description:"Level to set the dimmer to that doesn't turn the light on", constraints:["NUMBER"]] ]
 
 		//DEBUGGING
 		//command "debugShowVars"
@@ -655,22 +655,20 @@ String stopLevelChange() {
 	return switchMultilevelStopLvChCmd()
 }
 
-void setSpecialLevel(Number specialLevel)
+void setPrestageLevel(Number prestageLevel)
 {
-	logInfo "Set Special Level to ${specialLevel}"
+	logInfo "Set Pre-Staged Level to ${prestageLevel}"
 	if (device.currentValue("switch") == "on") //If on
 	{
 		logDebug "Detected switch as on"
-		//Set level to specialLevel
-		//setLevel(specialLevel)
-		getSetLevelCmds(specialLevel, duration=null)
+		//Set level to prestageLevel
+		sendCommands(setLevel(prestageLevel))
 	}
-	logDebug "Setting Max Brightness"
 	setParameter(25, 1, 1) // Set to custom brightness
-	setParameter(18, specialLevel, size=1) //Set custom brightness
-	// secureCmd(configSetCmd(18, 1, specialLevel as Integer))
-	//Lock in parameters
-	configure()
+	setParameter(18, prestageLevel, size=1) //Set custom brightness
+	// configure() //Lock in parameters
+	// refresh()
+	refreshParams()
 }
 
 
