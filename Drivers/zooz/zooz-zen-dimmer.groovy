@@ -219,10 +219,10 @@ import groovy.transform.Field
 
 metadata {
 	definition (
-		name: "Zooz ZEN Dimmer Advanced",
-		namespace: "jtp10181",
-		author: "Jeff Page (@jtp10181)",
-		importUrl: "https://raw.githubusercontent.com/jtp10181/hubitat/master/Drivers/zooz/zooz-zen-dimmer.groovy"
+		name: "Custom Zooz ZEN Dimmer Advanced",
+		namespace: "steinbex",
+		author: "Alex Steinberg, (Steinbex)",
+		importUrl: "https://raw.githubusercontent.com/Steinbex/Hubitat/main/Drivers/zooz/zooz-zen-dimmer.groovy"
 	) {
 		capability "Actuator"
 		capability "Switch"
@@ -249,6 +249,7 @@ metadata {
 		command "setParameter",[[name:"parameterNumber*",type:"NUMBER", description:"Parameter Number", constraints:["NUMBER"]],
 			[name:"value*",type:"NUMBER", description:"Parameter Value", constraints:["NUMBER"]],
 			[name:"size",type:"NUMBER", description:"Parameter Size", constraints:["NUMBER"]]]
+		command "setSpecialLevel", [[name:"specialLevel", type:"NUMBER", description:"Level to set the dimmer to that doesn't turn the light on", constraints:["NUMBER"]] ]
 
 		//DEBUGGING
 		//command "debugShowVars"
@@ -653,6 +654,25 @@ String stopLevelChange() {
 	logDebug "stopLevelChange()"
 	return switchMultilevelStopLvChCmd()
 }
+
+void setSpecialLevel(Number specialLevel)
+{
+	logInfo "Set Special Level to ${specialLevel}"
+	if (device.currentValue("switch") == "on") //If on
+	{
+		logDebug "Detected switch as on"
+		//Set level to specialLevel
+		//setLevel(specialLevel)
+		getSetLevelCmds(specialLevel, duration=null)
+	}
+	logDebug "Setting Max Brightness"
+	setParameter(25, 1, 1) // Set to custom brightness
+	setParameter(18, specialLevel, size=1) //Set custom brightness
+	// secureCmd(configSetCmd(18, 1, specialLevel as Integer))
+	//Lock in parameters
+	configure()
+}
+
 
 //Button commands required with capabilities
 void push(buttonId) { sendBasicButtonEvent(buttonId, "pushed") }
