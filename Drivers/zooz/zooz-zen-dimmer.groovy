@@ -658,18 +658,17 @@ String stopLevelChange() {
 void setPrestageLevel(Number prestageLevel)
 {
 	logInfo "Set Pre-Staged Level to ${prestageLevel}"
+	List<String> cmds = []
 	if (device.currentValue("switch") == "on") //If on
 	{
-		logDebug "Detected switch as on"
-		//Set level to prestageLevel
-		sendCommands(setLevel(prestageLevel))
+		logDebug "Detected that the switch is on"
+		cmds << setLevel(prestageLevel)
 	}
-	setParameter(25, 1, 1) // Set to custom brightness
-	setParameter(18, prestageLevel, size=1) //Set custom brightness
-	// configure() //Lock in parameters
-	// refresh()
-	refreshParams()
-}
+	cmds << setParameter(25, 1, 1) // Set to custom brightness
+	cmds << setParameter(18, prestageLevel, size=1) //Set custom brightness
+
+	sendCommands(cmds)
+}	
 
 
 //Button commands required with capabilities
